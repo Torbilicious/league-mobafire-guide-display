@@ -8,21 +8,22 @@ import com.stirante.lolclient.ClientApi
 import com.stirante.lolclient.ClientConnectionListener
 import com.stirante.lolclient.ClientWebSocket
 import generated.LolChampSelectChampSelectSession
-import org.http4k.client.ApacheClient
-import org.http4k.core.Method
-import org.http4k.core.Method.*
-import org.http4k.core.Request
+import javafx.beans.property.SimpleStringProperty
+import tornadofx.*
+import java.util.Observable
+import kotlin.system.exitProcess
 import kotlin.system.measureTimeMillis
 
 
-class Main {
+val url = SimpleStringProperty("https://www.mobafire.com/league-of-legends")
+
+class Main(args: Array<String>) {
     private val mapper = ObjectMapper()
         .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
         .registerKotlinModule()
     private val champions = readChampions()
     private val api = connectClient()
 
-    private val httpClient = ApacheClient()
 
 
     init {
@@ -45,22 +46,25 @@ class Main {
                 }
 
                 val id = selection.championId
-                val name = champions.find { it.key == selection.championId.toString() }?.name ?: return
+                val name = champions.find { it.key == id.toString() }?.name ?: return
 
-                println(id)
-                println(name)
+                println("Selected new champion: '$name'")
 
                 val safeChampionName = getUrlSafeChampionName(name)
-                val response = httpClient(Request(GET, mobafireUrlTemplate.replace("{{CHAMPION_NAME}}", safeChampionName)))
-                println(response.status.code)
 
-                println()
+                runAsync {
+                    mobafireUrlTemplate.replace("{{CHAMPION_NAME}}", safeChampionName)
+                } ui {
+                    url.set(it)
+                }
             }
 
             override fun onClose(p0: Int, p1: String?) {
-                TODO()
+                exitProcess(1)
             }
         })
+
+        launch<GUI>(args)
     }
 
     private fun connectClient(): ClientApi {
@@ -75,7 +79,7 @@ class Main {
             }
 
             override fun onClientDisconnected() {
-                TODO()
+                exitProcess(2)
             }
         })
 
@@ -112,7 +116,7 @@ class Main {
     }
 }
 
-fun main() {
-    Main()
+fun main(args: Array<String>) {
+    Main(args)
 }
 
