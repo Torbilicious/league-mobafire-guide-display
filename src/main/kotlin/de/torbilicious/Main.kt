@@ -8,6 +8,10 @@ import com.stirante.lolclient.ClientApi
 import com.stirante.lolclient.ClientConnectionListener
 import com.stirante.lolclient.ClientWebSocket
 import generated.LolChampSelectChampSelectSession
+import org.http4k.client.ApacheClient
+import org.http4k.core.Method
+import org.http4k.core.Method.*
+import org.http4k.core.Request
 import kotlin.system.measureTimeMillis
 
 
@@ -17,6 +21,9 @@ class Main {
         .registerKotlinModule()
     private val champions = readChampions()
     private val api = connectClient()
+
+    private val httpClient = ApacheClient()
+
 
     init {
 
@@ -42,6 +49,11 @@ class Main {
 
                 println(id)
                 println(name)
+
+                val safeChampionName = getUrlSafeChampionName(name)
+                val response = httpClient(Request(GET, mobafireUrlTemplate.replace("{{CHAMPION_NAME}}", safeChampionName)))
+                println(response.status.code)
+
                 println()
             }
 
@@ -86,6 +98,17 @@ class Main {
         val json = mapper.readValue<ChampionJsonWrapper>(championsJsonString)
 
         return json.data
+    }
+
+    private fun getUrlSafeChampionName(name: String): String {
+        return name
+            .toLowerCase()
+            .replace(".", "")
+            .replace(" ", "-")
+    }
+
+    companion object {
+        private const val mobafireUrlTemplate = "https://www.mobafire.com/league-of-legends/{{CHAMPION_NAME}}-guide"
     }
 }
 
