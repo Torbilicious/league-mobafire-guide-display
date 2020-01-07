@@ -1,94 +1,91 @@
 package de.torbilicious
 
-import org.http4k.client.ApacheClient
-import org.http4k.core.Body
-import org.http4k.core.Method.GET
-import org.http4k.core.Request
-import org.http4k.format.Jackson.auto
-import java.time.Duration
-import java.time.Instant
+import com.fasterxml.jackson.databind.DeserializationFeature
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.kotlin.readValue
+import com.fasterxml.jackson.module.kotlin.registerKotlinModule
+import com.stirante.lolclient.ClientApi
+import com.stirante.lolclient.ClientConnectionListener
+import com.stirante.lolclient.ClientWebSocket
+import generated.LolChampSelectChampSelectSession
+import kotlin.system.measureTimeMillis
 
-
-private val API_KEY: String? = System.getenv("API_KEY")
-private const val REGION: String = "euw1"
-private const val API_BASE: String = "https://${REGION}.api.riotgames.com/lol"
-
-
-data class Summoner(
-    val name: String,
-    val accountId: String
-)
-
-data class Game(
-    val timestamp: Long,
-    val gameId: String,
-
-
-    val lane: String,
-    val champion: String,
-    val platformId: String,
-    val queue: Int,
-    val role: String,
-    val season: Int,
-
-    val time: Instant = Instant.ofEpochMilli(timestamp)
-)
-
-data class GamesResponse(
-    val matches: List<Game>,
-    val endIndex: Int,
-    val startIndex: Int,
-    val totalGames: Int
-)
 
 class Main {
-    private val client = ApacheClient()
-    private val summonerLens = Body.auto<Summoner>().toLens()
-    private val gamesLens = Body.auto<GamesResponse>().toLens()
+    private val mapper = ObjectMapper()
+        .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+        .registerKotlinModule()
+    private val champions = readChampions()
+    private val api = connectClient()
 
     init {
-        require(API_KEY != null) { "You must provide the key via an environment variable named 'API_KEY'!" }
 
-        val summonerName = "Torbilicious"
-        val summoner = getSummonerByName(summonerName)
+        api.openWebSocket().setSocketListener(object : ClientWebSocket.SocketListener {
+            override fun onEvent(event: ClientWebSocket.Event?) {
+                if (event == null || event.eventType != "Update" || event.uri != "/lol-champ-select/v1/session") {
+                    return
+                }
 
-        println(summoner)
-        println()
+                val data = event.data
+                if (data !is LolChampSelectChampSelectSession) {
+                    return
+                }
 
+                val selection = data.myTeam.find { it.cellId == data.localPlayerCellId } ?: return
 
-        val games = getGamesForSummoner(summoner).sortedByDescending { it.timestamp }.take(3)
+                if (selection.championId == 0) {
+                    return
+                }
 
-        games.forEach { println(it) }
-        println()
-        println()
+                val id = selection.championId
+                val name = champions.find { it.key == selection.championId.toString() }?.name ?: return
 
+                println(id)
+                println(name)
+                println()
+            }
 
-        val fiveMinutesAgoAsEpoch = Instant.now().minus(Duration.ofMinutes(5)).toEpochMilli()
-        val lastGame = games.first()
-        val lastGameStartedLessThanFiveMinutesAgo = lastGame.timestamp > fiveMinutesAgoAsEpoch
-
-        println("lastGameTime = ${lastGame.time}")
-        println("lastGameStartedLessThanFiveMinutesAgo = $lastGameStartedLessThanFiveMinutesAgo")
+            override fun onClose(p0: Int, p1: String?) {
+                TODO()
+            }
+        })
     }
 
-    private fun getSummonerByName(name: String): Summoner {
-        val response = client(
-            Request(GET, "${API_BASE}/summoner/v4/summoners/by-name/${name}")
-                .headers(listOf("X-Riot-Token" to API_KEY))
-        )
+    private fun connectClient(): ClientApi {
+        println("Awaiting connection.")
 
-        return summonerLens(response)
+        var connected = false
+
+        val api = ClientApi()
+        api.addClientConnectionListener(object : ClientConnectionListener {
+            override fun onClientConnected() {
+                connected = true
+            }
+
+            override fun onClientDisconnected() {
+                TODO()
+            }
+        })
+
+
+        val time = measureTimeMillis {
+            while (!connected) {
+                Thread.sleep(20)
+            }
+        }
+
+        println("Connected in ${time}ms.")
+        return api
     }
 
-    private fun getGamesForSummoner(summoner: Summoner): List<Game> {
-        val response = client(
-            Request(GET, "${API_BASE}/match/v4/matchlists/by-account/${summoner.accountId}")
-                .headers(listOf("X-Riot-Token" to API_KEY))
-        )
+    data class Champion(val name: String, val key: String)
+    data class ChampionJsonWrapper(val type: String, val data: List<Champion>)
 
-        val gamesResponse = gamesLens(response)
+    private fun readChampions(): List<Champion> {
+        val championsJsonString = this.javaClass.getResource("/champions.json").readText()
+        val json = mapper.readValue<ChampionJsonWrapper>(championsJsonString)
 
-        return gamesResponse.matches
+        return json.data
     }
 }
 
