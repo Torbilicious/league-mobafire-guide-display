@@ -16,6 +16,7 @@ import kotlin.system.measureTimeMillis
 
 
 val url = SimpleStringProperty("https://www.mobafire.com/league-of-legends")
+val championName = SimpleStringProperty("")
 
 class Main(args: Array<String>) {
     private val mapper = ObjectMapper()
@@ -48,7 +49,7 @@ class Main(args: Array<String>) {
                 val id = selection.championId
                 val name = champions.find { it.key == id.toString() }?.name ?: return
 
-                println("Selected new champion: '$name'")
+                championName.set(name)
 
                 val safeChampionName = getUrlSafeChampionName(name)
 
@@ -63,6 +64,10 @@ class Main(args: Array<String>) {
                 exitProcess(1)
             }
         })
+
+        championName.onChange {
+            println("Selected new champion: '$it'")
+        }
 
         launch<GUI>(args)
     }
