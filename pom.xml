@@ -4,8 +4,8 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>de.torbilicious</groupId>
-    <artifactId>league-champion-recommendations</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <artifactId>league-mobafire-guide-display</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
 
